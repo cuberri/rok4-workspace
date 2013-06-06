@@ -1,0 +1,22 @@
+# -*- mode: ruby -*-
+# vi: set ft=ruby :
+
+Vagrant::Config.run do |config|
+  config.vm.box = "debian70"
+
+  config.vm.host_name = "rok4"
+
+  config.vm.forward_port 22, 2223
+  config.vm.forward_port 8080, 8080
+
+  #config.vm.share_folder "rok4-sources", "/vagrant_rok4_sources", "../sources"
+
+  # plugin : https://github.com/dotless-de/vagrant-vbguest
+  config.vbguest.auto_update = true
+  config.vbguest.no_remote = true
+
+  config.vm.provision :chef_solo do |chef|
+    chef.cookbooks_path = ["./cookbooks", "../../cookbooks"]
+    chef.add_recipe "rok4-tests"
+  end
+end
