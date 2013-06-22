@@ -9,7 +9,7 @@ Vagrant::Config.run do |config|
   config.vm.forward_port 22, 2223
   config.vm.forward_port 8080, 8080
 
-  #config.vm.share_folder "rok4-sources", "/vagrant_rok4_sources", "../sources"
+  config.vm.share_folder "rok4-workspace", "/vagrant_rok4-workspace", ".."
 
   # plugin : https://github.com/dotless-de/vagrant-vbguest
   config.vbguest.auto_update = true

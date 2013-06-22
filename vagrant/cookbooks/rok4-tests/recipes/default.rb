@@ -1,8 +1,13 @@
 # gimme my vim
 package "vim"
 
+package "gawk"
+
 # use nginx in front of rok4, fastcgi backed
 package "nginx"
+
+# we will use tcpdump in order to capture traffic
+package "tcpdump"
 
 # install rok4 and configure it to use the demo dataset
 include_recipe "rok4"
