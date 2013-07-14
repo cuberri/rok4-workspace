@@ -1,28 +1,32 @@
 Jouer avec Rok4 et FastCGI
 ==========================
 
-Ci-dessous la retranscription de quelques notes afin de partager un travail d'investigation initialement réalisé par un de mes ingénieurs systèmes préférés (Coucou Laurent ! ;)).
+Ci-dessous la retranscription de quelques notes afin de partager un travail d'investigation initialement réalisé par un de mes ingénieurs systèmes préférés (coucou Laurent ! ;)).
 
 Présentation rapide de Rok4
 ---------------------------
 
-Rok4 est serveur open-source écrit en C++ qui implémente les standars WMS 1.3.0 et WMTS 1.0.0 de l'OGC (Open Geospatial Consortium). Il permet la diffusion d'images géoréférencées. Selon sa documentation technique, il est _« pensé pour être un serveur statique FastCGI interfacable avec un serveur HTTP traditionnel. »_
+Rok4 est serveur open-source écrit en C++ qui implémente les standars WMS 1.3.0 et WMTS 1.0.0 de l'OGC (Open Geospatial Consortium). Il permet la diffusion d'images géoréférencées.
+
+Selon sa documentation technique :
+
+> « Il est, par défaut, pensé pour être un serveur statique FastCGI interfacable avec un serveur HTTP traditionnel. »
 
 Pour plus de détails : [rok4.org](http://www.rok4.org/).
 
 Objectif
 --------
 
-L'objectif est de s'abstraire de la couche de communication entre un serveur web (ici nginx) et une application FastCGI (ici rok4) afin de tester les perfs « pures » de cette dernière. Concrètement, dans notre cas, on souhaite pouvoir parler à rok4 en ligne de commande sans passer par HTTP.
+L'objectif est de s'abstraire de la couche de communication entre un serveur web (ici nginx) et une application FastCGI (ici rok4). Concrètement, dans notre cas, on souhaite pouvoir parler à rok4 en ligne de commande sans passer par HTTP.
 
 **Exemple de requête habituellement envoyée à rok4 (sur HTTP) :**
 
 	# curl "http://localhost:8080/wmts?request=GetVersion&service=WMTS"
 
-			 HTTP          FastCGI
-	browser ------> nginx ---------> rok4
+			      HTTP          FastCGI
+	browser/curl ------> nginx ---------> rok4
 
-_Attention : la requête `GetVersion` ne fait pas partie des standards impléméntés par rok4, mais permet d'obtenir la version de l'application déployée par le biais d'un code d'erreur qui, lui, est standard._
+_Attention : la requête `GetVersion` ne fait pas partie des standards WMS/WMTS impléméntés par rok4, mais permet d'obtenir la version de l'application déployée par le biais d'un code d'erreur qui, lui, est standard._
 
 **Utilisation souhaitée de rok4 (en ligne de commande directement sur TCP) :**
 
@@ -31,12 +35,12 @@ _Attention : la requête `GetVersion` ne fait pas partie des standards implémé
 			   FastCGI
 	linux box ---------> rok4
 
-_Note : Bien qu'on n'ait pas encore une idée certaine de la commande à exécuter, on se doute bien que netcat sera utile :)_
+_Note : Bien qu'on n'ait pas encore une idée certaine de la commande à exécuter, on se doute bien que `netcat` sera utile :)_
 
 Plan de travail
 ---------------
 
-Si ça intéresse quelqu'un de jouer avec rok4 de la même manière que celle décrite ici, le projet [rok4-workspace](https://github.com/cuberri/rok4-workspace) permet d'obtenir rapidement une debian 7 avec un rok4 et un nginx installés et configuré. Ce projet tire partie de la recette Chef [rok4](https://github.com/cuberri/rok4) écrite pour l'occasion, qui permet d'installer rok4 à partir des sources téléchargées, et de configurer un jeu de données exemple.
+Si ça intéresse quelqu'un de jouer avec rok4 de la même manière que celle décrite ici, le projet [rok4-workspace](https://github.com/cuberri/rok4-workspace) permet d'obtenir rapidement une debian 7 avec un rok4 et un nginx installés et configurés. Ce projet tire partie de la recette Chef [rok4](https://github.com/cuberri/rok4) écrite pour l'occasion, qui permet d'installer rok4 à partir des sources téléchargées, et de configurer un jeu de données exemple.
 
 Le projet [rok4-workspace](https://github.com/cuberri/rok4-workspace) contient également les exemples de cet article.
 
@@ -47,7 +51,7 @@ _Note : on suppose que rok4 est correctement installé et configuré, et qu'il e
 
 ### 1. Capture et analyse du traffic
 
-Avant de fabriquer une requête à envoyer à rok4 en FastCGI, il nous faut capturer le traffic réseau lors de l'émission d'une requête HTTP. Un coup de tcpdump et le tour est joué. La commande suivante lance l'écoute du traffic et écrit le résultat dans un fichier `getversion.pcap` disponible [ici](https://github.com/cuberri/rok4-workspace/blob/master/getversion.pcap?raw=true).
+Avant de fabriquer une requête à envoyer à rok4 en FastCGI, il nous faut capturer le traffic réseau lors de l'émission d'une requête HTTP. Un coup de `tcpdump` et le tour est joué. La commande suivante lance l'écoute du traffic et écrit le résultat dans un fichier `getversion.pcap` disponible [ici](https://github.com/cuberri/rok4-workspace/blob/master/getversion.pcap?raw=true).
 
 	root@rok4:/vagrant_rok4-workspace# tcpdump -w getversion.pcap -s0 -i any port 9000 &
 
@@ -63,7 +67,7 @@ Pour « voir » concrètement le traffic capturé, on utilise encore une fois tc
 
 	root@rok4:/vagrant_rok4-workspace# tcpdump -r getversion.pcap -X -n
 
-La sortie complète est disponible [ici](https://gist.github.com/cuberri/5995198). On peut y voir une session TCP d'une dixaine de paquets pour l'échange FastCGI. On s'intéresse uniquement au paquet contenant le corps de la requête. On l'obtient en tâtonnant à coup de grep, et on le garde de côté dans un fichier dédié sur lequel on va travailler :
+La sortie complète est disponible [ici](https://gist.github.com/cuberri/5995198). On peut y voir une session TCP d'une dixaine de paquets pour l'échange FastCGI. On s'intéresse uniquement au paquet contenant le corps de la requête. On l'obtient en tâtonnant à coup de `grep`, et on le met de côté dans un fichier dédié sur lequel on va travailler :
 
 	# tcpdump -r getversion.pcap -X -n | grep -B6 -A34 "ERY_STRINGreques" | tee getversion.req
 
@@ -117,7 +121,7 @@ Pour rappel, on souhaite envoyer à Rok4 la même requête `GetVersion` émise s
 
 Le paquet TCP isolé au-dessus (`getversion.req`) nous apprend que le corps de la requête contient exactement 576 octets de données (voir en toute fin de la ligne 1 : `length 576`). Le début du paquet correspondant à l'entête TCP, il nous faut l'écarter et conserver uniquement le corps.
 
-En travaillant sur le fichier texte contenant le paquet issu de la capture réseau, on arrive à la commande suivante, qui permet de créer un fichier binaire (`getversion.rok4`) contenant la requête à envoyer (attention, ça pique un peu, mais ça donne l'occasion de réviser awk :P) :
+En travaillant sur le paquet au format texte issu de la capture réseau, on arrive à la commande suivante, qui permet de créer un fichier binaire (`getversion.rok4`) contenant la requête à envoyer (attention, ça pique un peu, mais ça donne l'occasion de réviser awk :P) :
 
 	root@rok4:/vagrant_rok4-workspace# echo -e -n $(awk '/^\t0x*/{print substr($0,11,39)}' getversion.req | tr -d ' ','\n' | awk '{print substr($0,length($0)+1-576*2,576*2)}' | awk '{print gensub("(..)","\\\\x\\1","g",$0)}') > getversion.rok4
 
@@ -167,7 +171,7 @@ Explication de la commande pas à pas :
 		2f2a 0000 0104 0001 0000 0000 0105 0001
 		0000 0000
 
-* Ensuite, on traite la sortie de la commande précédente afin d'obtenir une unique ligne
+* Ensuite, on traite la sortie de la commande précédente afin d'obtenir les données sur une seule ligne
 
 		root@rok4:/vagrant_rok4-workspace# awk '/^\t0x*/{print substr($0,11,39)}' getversion.req | tr -d ' ','\n'
 		4500027409934000400630ef7f0000017f0000019c8c23283f56843f948e927680182006006900000101080a00368daf00368daf0101000100080000000100000000000001040001021602000c1f51554552595f535452494e47726571756573743d47657456657273696f6e26736572766963653d574d54530e03524551554553545f4d4554484f444745540c00434f4e54454e545f545950450e00434f4e54454e545f4c454e4754480f195343524950545f46494c454e414d452f7573722f73686172652f6e67696e782f7777772f776d74730b055343524950545f4e414d452f776d74730b25524551554553545f5552492f776d74733f726571756573743d47657456657273696f6e26736572766963653d574d54530c05444f43554d454e545f5552492f776d74730d14444f43554d454e545f524f4f542f7573722f73686172652f6e67696e782f7777770f085345525645525f50524f544f434f4c485454502f312e311107474154455741595f494e544552464143454347492f312e310f0b5345525645525f534f4654574152456e67696e782f312e322e310b0952454d4f54455f414444523132372e302e302e310b0552454d4f54455f504f525434303134340b095345525645525f414444523132372e302e302e310b045345525645525f504f5254383038300b095345525645525f4e414d456c6f63616c686f7374050048545450530f0352454449524543545f5354415455533230300f0b485454505f555345525f4147454e546375726c2f372e32362e30090e485454505f484f53546c6f63616c686f73743a383038300b03485454505f4143434550542a2f2a000001040001000000000105000100000000
@@ -214,11 +218,11 @@ Le fichier `getversion.rok4` (dispo [ici](https://github.com/cuberri/rok4-worksp
 
 ### 3. Envoi de la requête en FastCGI sur TCP
 
-Maintenant que le fichier `getversion.rok4` est créé, il ne reste plus qu'à envoyer son contenu sur le port qui va bien, et à écrire la sortie de la commande dans un nouveau fichier :
+Maintenant que le fichier `getversion.rok4` est créé, il ne reste plus qu'à envoyer son contenu sur le port d'écoute de rok4, et à écrire la sortie de la commande dans un nouveau fichier :
 
 	root@rok4:/vagrant_rok4-workspace# cat getversion.rok4 | nc 0 9000 | dd of=getversion.fastcgi
 
-Le résultat peut être visualiser de la même manière que précédemment :
+Le résultat peut être visualisé de la même manière que précédemment :
 
 	root@rok4:/vagrant_rok4-workspace# strings getversion.fastcgi
 	Status: 501 Not implemented
@@ -242,4 +246,4 @@ Bon, j'avoue volontiers que l'intérêt dans la vraie vie est somme toute assez 
 * Tests de performance « pure » de l'application (i.e. : sans nginx/apache en amont) ;
 * Tests fonctionnels lors d'une montée de version : on peut par exemple enrichir des scripts de déploiement afin d'exécuter un `GetVersion` et s'assurer du fonctionnement du serveur avant sa remise dans un flux de production.
 
-Pour finir, merci à Laurent (mon ingé sys favori, je le dirai jamais assez :)) pour le travail réalisé bien avant moi sur le sujet.
+Pour finir, un clin d'oeil à Laurent (mon ingé sys favori, je le dirai jamais assez :)) pour le travail réalisé bien avant moi sur le sujet.
