@@ -26,7 +26,7 @@ link "/etc/nginx/sites-enabled/rok4" do
     to "/etc/nginx/sites-available/rok4"
 end
 
-# restart nginx for the rok site to be available
+# restart nginx for the rok4 site to be available
 service "nginx" do
   action :restart
 end
